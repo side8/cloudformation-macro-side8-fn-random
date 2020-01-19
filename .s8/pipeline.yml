@@ -1,0 +1,29 @@
+# see https://docs.pipeline.side8.io/
+---
+version: 1
+branches:
+  - match: "prod"
+    config:
+      cloudformation:
+        Parameters:
+          - ParameterKey: "Environment"
+            ParameterValueVariable: "base_branch"
+#     deploy_account_id: ???
+  - match: "nonprod"
+    config:
+      cloudformation:
+        Parameters:
+          - ParameterKey: "Environment"
+            ParameterValueVariable: "base_branch"
+#     deploy_account_id: ???
+  - match: "dev"
+    config:
+      cloudformation:
+        Parameters:
+          - ParameterKey: "Environment"
+            ParameterValueVariable: "base_branch"
+          - ParameterKey: "Development"
+            ParameterValueVariable: "yes"
+#     deploy_account_id: ???
+config:
+# build_account_id: ???

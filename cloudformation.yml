@@ -1,0 +1,95 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'cloudformation-side8-fn-random-macro'
+
+Parameters:
+  Environment:
+    Type: 'String'
+
+  Development:
+    Type: 'String'
+    AllowedValues: ["yes", "no"]
+    Default: "no"
+
+Conditions:
+  Development: !Equals [!Ref 'Development', 'yes']
+
+Resources:
+  Side8FnRandomCloudFormationMacro:
+    Type: 'AWS::CloudFormation::Macro'
+    Properties:
+      FunctionName: !Ref 'Side8FnRandomMacroLambdaFunction'
+      # LogGroupName: String
+      # LogRoleARN: String
+      Name: !If
+        - 'Development'
+        - !Sub '${Environment}-Side8-Fn-Random'
+        - 'Side8-Fn-Random'
+
+  Side8FnRandomMacroLambdaFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Runtime: 'python3.7'
+      Handler: 'index.handler'
+      Role: !GetAtt 'Side8FnRandomMacroLambdaFunctionIamRole.Arn'
+      Code:
+        ZipFile: |
+            import json
+            import random
+            import secrets
+            class FormatError(Exception): pass
+            
+            generate_random = {
+                "String": lambda l: secrets.token_hex(l)[:l],
+                "Integer": lambda l: random.randint(10**(l-1), 10**l-1),
+            }
+            def random_string(obj):
+                if "Side8::Fn::Random" in obj.keys():
+                    if list(obj.keys()) == ["Side8::Fn::Random"]:
+                        type = obj["Side8::Fn::Random"].pop("Type", "String")
+                        if not isinstance(type, str) or type not in ["String", "Integer"]:
+                            raise FormatError("Type must be String or Integer")
+                        length = obj["Side8::Fn::Random"].pop("Length", 8)
+                        if not isinstance(length, int) or length < 1 or length > 8:
+                            raise FormatError("Length must be an integer between 1 and 8")
+                        if obj["Side8::Fn::Random"] != {}:
+                            raise FormatError(f"""Unknown keys: {", ".join(obj["Side8::Fn::Random"].keys())}""")
+                        return generate_random[type](length)
+                    else:
+                        raise FormatError(f"Side8::Fn::Random should be the only key: {obj}")
+                else:
+                    return obj
+            def handler(event, context):
+                try:
+                    fragment = json.loads(json.dumps(event['fragment']), object_hook=random_string)
+                except FormatError as e:
+                    return {
+                        'requestId': event['requestId'],
+                        'status': e.message,
+                        'fragment': event['fragment'],
+                    }
+                else:
+                    return {
+                        'requestId': event['requestId'],
+                        'status': 'success',
+                        'fragment': fragment,
+                    }
+
+  Side8FnRandomMacroLambdaFunctionIamRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service:
+                - 'lambda.amazonaws.com'
+            Action:
+              - 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+
+Outputs:
+  Side8FnRandomCloudFormationMacro:
+    Value: !Ref 'Side8FnRandomCloudFormationMacro'
